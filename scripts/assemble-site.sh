@@ -190,12 +190,21 @@ if (!match) {
 const scriptText =
   match[1].trim().replace(/;$/, '').replace(/\s*([;,{}=>+])\s*/g, '$1') + '()';
 const decoded = decodeURIComponent(encodeURIComponent(scriptText));
+const origin = decoded.match(/u='(https:\/\/[^']+)'/);
+if (!origin) {
+  console.error('bookmarklet has no asset origin');
+  process.exit(1);
+}
+const urls = [...decoded.matchAll(/u\+'([a-z0-9.]+)/g)].map(
+  match => origin[1] + match[1]
+);
 for (const url of [
   'https://ll.herzig.net/bg1.js',
   'https://ll.herzig.net/bg1.css',
 ]) {
-  if (!decoded.includes(url)) {
+  if (!urls.includes(url)) {
     console.error(`bookmarklet does not load ${url}`);
+    console.error(urls.join('\n'));
     process.exit(1);
   }
 }
