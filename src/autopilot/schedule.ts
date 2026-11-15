@@ -60,6 +60,13 @@ export const BURST_INTERVAL_MS = 1200;
 export const RAPID_INTERVAL_MS = 600;
 export const RAPID_MIN_INTERVAL_MS = 500;
 export const APPROACH_INTERVAL_MS = 6000;
+/**
+ * Built-in pace while a refill window is the only reason to stay warm.
+ *
+ * The same 6 seconds as approach. A drop that is actually near still uses the
+ * burst interval. The control panel can set the two apart.
+ */
+export const REFILL_INTERVAL_MS = APPROACH_INTERVAL_MS;
 export const IDLE_INTERVAL_MS = 45_000;
 /**
  * Tomorrow's inventory has no reliable minute-by-minute drop schedule, but
@@ -69,6 +76,36 @@ export const IDLE_INTERVAL_MS = 45_000;
  */
 export const TOMORROW_INTERVAL_MS = 15_000;
 
+/**
+ * Which built-in rule produced the interval.
+ *
+ * `nextll` is the hand-started rapid search. Refill is its own rule even
+ * though its built-in interval matches approach, so a saved pace for one does
+ * not have to move the other.
+ */
+export type CadenceRule =
+  | 'nextll'
+  | 'idle'
+  | 'approach'
+  | 'burst'
+  | 'tomorrow'
+  | 'refill';
+
+/**
+ * Optional replacements for the built-in intervals.
+ *
+ * Absent fields keep the constants above. The poller fills this from the
+ * control panel; `cadence` itself does not read storage, so it stays pure.
+ */
+export interface CadenceIntervals {
+  nextllMs?: number;
+  idleMs?: number;
+  approachMs?: number;
+  burstMs?: number;
+  tomorrowMs?: number;
+  refillMs?: number;
+}
+
 export interface CadenceInput {
   /** Current park time, ideally drift-corrected -- see `syncedParkTime()`. */
   now: ParkTime;
@@ -76,8 +113,8 @@ export interface CadenceInput {
   dropTimes?: ParkTime[];
   /**
    * Periods in which an attraction tends to be refilled rather than released
-   * at one predictable instant. Unlike a drop time, a refill window stays at
-   * the moderate approach cadence for its whole duration.
+   * at one predictable instant. Unlike a drop time, a refill window stays on
+   * its own moderate cadence for its whole duration.
    */
   refillWindows?: RefillWindow[];
   /**
@@ -94,6 +131,8 @@ export interface CadenceInput {
   rapid?: boolean;
   /** A deliberate tomorrow watch, paced for cancellation/earlier-time releases. */
   tomorrow?: boolean;
+  /** Saved paces. Omitted fields use the built-in intervals. */
+  intervals?: CadenceIntervals;
   /**
    * Every moment a booking window opens, from `LLClient.nextBookTimes`.
    *
@@ -110,6 +149,8 @@ export interface RefillWindow {
 
 export interface Cadence {
   mode: PollMode;
+  /** Which rule set `intervalMs`, so jitter uses that rule's floor. */
+  rule: CadenceRule;
   intervalMs: number;
   /** The target driving this decision, if any. */
   target?: ParkTime;
@@ -152,6 +193,10 @@ export function secondsUntil(now: ParkTime, target: ParkTime): number {
  * is simultaneously too fast when nothing is happening and no faster when a
  * drop is seconds away.
  */
+function interval(override: number | undefined, fallback: number): number {
+  return override ?? fallback;
+}
+
 export function cadence({
   now,
   dropTimes = [],
@@ -159,10 +204,21 @@ export function cadence({
   nextBookTimes = [],
   rapid = false,
   tomorrow = false,
+  intervals = {},
 }: CadenceInput): Cadence {
-  if (rapid) return { mode: 'burst', intervalMs: RAPID_INTERVAL_MS };
+  if (rapid) {
+    return {
+      mode: 'burst',
+      rule: 'nextll',
+      intervalMs: interval(intervals.nextllMs, RAPID_INTERVAL_MS),
+    };
+  }
   if (tomorrow && now.hour >= 7 && now.hour < 22) {
-    return { mode: 'approach', intervalMs: TOMORROW_INTERVAL_MS };
+    return {
+      mode: 'approach',
+      rule: 'tomorrow',
+      intervalMs: interval(intervals.tomorrowMs, TOMORROW_INTERVAL_MS),
+    };
   }
   // Defaulting to empty arrays rather than testing for undefined keeps the
   // instantaneous target sources symmetrical below.
@@ -189,20 +245,42 @@ export function cadence({
     }
   }
 
-  if (burst) return { mode: 'burst', intervalMs: BURST_INTERVAL_MS, ...burst };
+  if (burst) {
+    return {
+      mode: 'burst',
+      rule: 'burst',
+      intervalMs: interval(intervals.burstMs, BURST_INTERVAL_MS),
+      ...burst,
+    };
+  }
   if (approach) {
-    return { mode: 'approach', intervalMs: APPROACH_INTERVAL_MS, ...approach };
+    return {
+      mode: 'approach',
+      rule: 'approach',
+      intervalMs: interval(intervals.approachMs, APPROACH_INTERVAL_MS),
+      ...approach,
+    };
   }
   // A refill is a span, not a series of invented drop instants. Poll at the
-  // existing 6-second approach rate while inside it; a real scheduled drop
-  // still wins above and can use the shorter burst interval.
+  // refill pace while inside it; a real scheduled drop still wins above and
+  // can use the shorter burst interval. The built-in refill pace matches
+  // approach, and a saved setting can split them.
   const refillWindow = refillWindows.find(
     window => +now >= +window.start && +now <= +window.end
   );
   if (refillWindow) {
-    return { mode: 'approach', intervalMs: APPROACH_INTERVAL_MS, refillWindow };
+    return {
+      mode: 'approach',
+      rule: 'refill',
+      intervalMs: interval(intervals.refillMs, REFILL_INTERVAL_MS),
+      refillWindow,
+    };
   }
-  return { mode: 'idle', intervalMs: IDLE_INTERVAL_MS };
+  return {
+    mode: 'idle',
+    rule: 'idle',
+    intervalMs: interval(intervals.idleMs, IDLE_INTERVAL_MS),
+  };
 }
 
 /**
@@ -249,16 +327,19 @@ export function backoffMs(consecutiveFailures: number): number {
 }
 
 /**
- * Spread an interval by +/-20% so the request pattern has no fixed period.
+ * Spread an interval so the request pattern has no fixed period.
  *
- * `rand` is injectable purely so tests can be deterministic.
+ * `spreadFraction` is half the width: 0.2 is the built-in ±20%, and 0 leaves
+ * the interval alone. `rand` is injectable purely so tests can be deterministic.
+ * The result is never under `minIntervalMs`.
  */
 export function withJitter(
   intervalMs: number,
   rand = Math.random,
-  minIntervalMs = MIN_INTERVAL_MS
+  minIntervalMs = MIN_INTERVAL_MS,
+  spreadFraction = 0.2
 ): number {
-  const spread = intervalMs * 0.2;
+  const spread = intervalMs * spreadFraction;
   const jittered = intervalMs - spread + rand() * spread * 2;
   return Math.max(minIntervalMs, Math.round(jittered));
 }

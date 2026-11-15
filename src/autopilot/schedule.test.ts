@@ -306,4 +306,49 @@ describe('cadence() in rapid mode', () => {
       MIN_INTERVAL_MS
     );
   });
+
+  it('honors a narrower or wider spread', () => {
+    expect(withJitter(10_000, () => 0, MIN_INTERVAL_MS, 0.1)).toBe(9000);
+    expect(withJitter(10_000, () => 1, MIN_INTERVAL_MS, 0.1)).toBe(11_000);
+    expect(withJitter(10_000, () => 0, MIN_INTERVAL_MS, 0)).toBe(10_000);
+  });
+});
+
+describe('cadence() with saved intervals', () => {
+  it('keeps the built-in intervals when none are passed', () => {
+    expect(cadence({ now: at(14), rapid: true }).intervalMs).toBe(
+      RAPID_INTERVAL_MS
+    );
+    expect(cadence({ now: at(9) }).intervalMs).toBe(IDLE_INTERVAL_MS);
+  });
+
+  it('uses a saved NextLL pace and names that rule', () => {
+    const c = cadence({
+      now: at(14),
+      rapid: true,
+      dropTimes: [at(14, 1)],
+      intervals: { nextllMs: 900 },
+    });
+    expect(c.rule).toBe('nextll');
+    expect(c.intervalMs).toBe(900);
+    expect(c.target).toBeUndefined();
+  });
+
+  it('sets refill apart from approach', () => {
+    const window = { start: at(11), end: at(15) };
+    const refill = cadence({
+      now: at(12),
+      refillWindows: [window],
+      intervals: { refillMs: 8000, approachMs: 4000 },
+    });
+    expect(refill.rule).toBe('refill');
+    expect(refill.intervalMs).toBe(8000);
+    const approach = cadence({
+      now: at(9, 43),
+      dropTimes: [DROP],
+      intervals: { refillMs: 8000, approachMs: 4000 },
+    });
+    expect(approach.rule).toBe('approach');
+    expect(approach.intervalMs).toBe(4000);
+  });
 });

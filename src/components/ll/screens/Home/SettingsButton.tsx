@@ -9,12 +9,14 @@ import NavContext from '@/contexts/NavContext';
 import BackupIcon from '@/icons/BackupIcon';
 // import News from '@/components/screens/News';
 
+import ClockIcon from '@/icons/ClockIcon';
 import ExitIcon from '@/icons/ExitIcon';
 import SettingsIcon from '@/icons/SettingsIcon';
 import UserIcon from '@/icons/UserIcon';
 
 import BackupRestore from '../BackupRestore';
 import PartySelector from '../PartySelector';
+import Polling from '../Polling';
 import { describeSession } from './describeSession';
 
 export default function SettingsButton() {
@@ -35,6 +37,11 @@ export default function SettingsButton() {
         text: 'Backup and Restore',
         icon: <BackupIcon />,
         action: () => goTo(<BackupRestore />),
+      },
+      {
+        text: 'Polling',
+        icon: <ClockIcon />,
+        action: () => goTo(<Polling />),
       },
       {
         text: 'Log Out',

@@ -14,6 +14,7 @@ import {
   resolveDoubtAndAcquire,
   startWhileHeld,
 } from '@/autopilot/lease';
+import { pacingFor } from '@/autopilot/pollingSettings';
 import { saveCommit } from '@/autopilot/storage';
 import { findHeldByEntitlement } from '@/autopilot/swap';
 import { NothingOpen, SearchStop } from '@/autopilot/timesearch';
@@ -160,7 +161,8 @@ export default function SwapAttractionSearch({ booking }: { booking: LLMP }) {
     };
     if (boardDate !== bookingDate) return inTurn();
     const board =
-      lastUpdated !== undefined && now - lastUpdated < CYCLE_MS
+      lastUpdated !== undefined &&
+      now - lastUpdated < pacingFor('timeSearch').intervalMs
         ? experiences
         : await pollExperiences();
     // Nor does a board that lists none of them, as another park's would not.
@@ -199,7 +201,12 @@ export default function SwapAttractionSearch({ booking }: { booking: LLMP }) {
         return await ll.offer(ride, held.guests, { booking: held });
       } catch (error) {
         if (error instanceof OfferError) {
-          coolUntil.current.set(ride.id, Date.now() + OFFER_COOLDOWN_MS);
+          coolUntil.current.set(
+            ride.id,
+            Date.now() +
+              (OFFER_COOLDOWN_MS / CYCLE_MS) *
+                pacingFor('timeSearch').intervalMs
+          );
         }
         throw error;
       }
