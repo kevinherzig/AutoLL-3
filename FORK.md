@@ -2,7 +2,7 @@
 
 Built on [joelface/bg1](https://github.com/joelface/bg1) and
 [jgeurts/bg1](https://github.com/jgeurts/bg1), both GPL-3.0-only.
-Deployed to <https://mbs1234.github.io/AutoLL-3/>.
+Deployed to <https://ll.herzig.net/>.
 
 ## Why a plain `mickey` build does not work
 
@@ -41,8 +41,8 @@ installer commit (static) ─► overlay index/start/news/contact/autoloader/ico
                               (never overwriting freshly built bg1.js, bg1.css,
                                responder.html or their chunks)
 runtime commit ────────────► overlay sensor-data.js
-                            ─► brand URLs and labels for mbs1234.github.io/AutoLL-3
-                            ─► GitHub Pages
+                            ─► brand URLs and labels for https://ll.herzig.net
+                            ─► the `site-ll` branch (nginx at the site root)
 ```
 
 ## Booking
@@ -127,7 +127,7 @@ all work regardless, and are the bulk of what this repository adds.
 
 Login works from this fork's own origin (confirmed on device 2026-09-04).
 Disney's OneID does **not** allowlist the `responderPage` redirect URI, so
-`https://mbs1234.github.io/AutoLL-3/responder.html` authenticates normally. This was
+`https://ll.herzig.net/responder.html` authenticates normally. This was
 the main risk in forking at all -- had OneID validated redirect URIs against a
 registered allowlist, no amount of build fixing would have produced a working
 fork.

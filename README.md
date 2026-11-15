@@ -12,7 +12,7 @@ actually hold.
 
 ## Install
 
-Open the [setup page](https://mbs1234.github.io/AutoLL-3/) on the phone you will
+Open the [setup page](https://ll.herzig.net/) on the phone you will
 use in the park and install **either** the bookmarklet **or** the userscript.
 
 |  | Bookmarklet | Userscript |
@@ -76,7 +76,7 @@ Disney's own rules allow.
 
 ## Using it
 
-**[User guide](https://mbs1234.github.io/AutoLL-3/guide.html)** — setup, the park
+**[User guide](https://ll.herzig.net/guide.html)** — setup, the park
 day, every screen, and what to do when something breaks.
 [docs/USER-GUIDE.md](docs/USER-GUIDE.md) is the same text in this repository.
 

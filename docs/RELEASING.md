@@ -35,7 +35,7 @@ governs syncing the two builds.
 ## Verifying a build
 
 Every deploy writes
-[`autoll3-release.json`](https://mbs1234.github.io/AutoLL-3/autoll3-release.json)
+[`autoll3-release.json`](https://ll.herzig.net/autoll3-release.json)
 and `autoll3-files.sha256` into the published site: the exact revisions the site
 is assembled from, plus a SHA-256 of every file served. Point a browser at it
 before a park day and confirm the build on your phone is the one the repository
@@ -48,7 +48,7 @@ served bundle byte for byte:
 ```bash
 npm run build
 shasum -a 256 dist/bg1.js
-curl -s https://mbs1234.github.io/AutoLL-3/bg1.js | shasum -a 256
+curl -s https://ll.herzig.net/bg1.js | shasum -a 256
 ```
 
 Build the commit the manifest names, not a branch — the build embeds its own
@@ -81,6 +81,34 @@ therefore built correctly and was then refused at the deploy step, with no steps
 recorded and nothing naming the cause. A `tag: autoll3-v*` policy was added
 beside the branch one. Anything forking this to a new repository has to add it
 again.
+
+## Self-hosted site
+
+This fork is served by nginx at <https://ll.herzig.net/>, at the site root
+rather than under `/AutoLL-3/`. The files nginx should serve are the `site-ll`
+branch: static files at the repository root, the same shape as upstream's
+`goofy` branch.
+
+```bash
+git clone --branch site-ll --depth 1 https://github.com/kevinherzig/AutoLL-3.git site
+```
+
+Point the nginx `root` at that checkout. Do not expose its `.git` directory.
+
+`scripts/assemble-site.sh` is the assembly the deploy workflow runs: a fresh
+`vite build`, the pinned AutoLL-2 installer pages and `sensor-data.js`, the
+URL rewrite onto `https://ll.herzig.net`, the user guide and the release
+manifest. Rebuild and publish a replacement branch with:
+
+```bash
+bash scripts/assemble-site.sh --publish
+git push origin site-ll
+```
+
+`--publish` commits `dist/` onto the local `site-ll` branch and does not push.
+The script needs GNU `find`, `sed` and `sha256sum`, and a network path to the
+public AutoLL-2 pins. `github.com/joelface/bg1` and `github.com/jgeurts/bg1`
+are left in `contact.html`; those are the GPL attribution.
 
 ## It depends on AutoLL-2 to publish
 

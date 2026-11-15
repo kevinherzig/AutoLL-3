@@ -18,6 +18,7 @@ import {
   mutationControl,
 } from './mutation';
 import type { MutationEvidence } from './mutation';
+import { pacingFor } from './pollingSettings';
 import {
   noteRefusal,
   noteThrottle,
@@ -25,6 +26,7 @@ import {
   refusalCount,
   subscribePushback,
 } from './pushback';
+import { withJitter } from './schedule';
 import {
   CommitGuard,
   CommitPhase,
@@ -1136,7 +1138,17 @@ export default function useTimeSearch(deps: TimeSearchDeps) {
         }
         if (stopped()) return;
         setState(s => ({ ...s, cycles: s.cycles + 1 }));
-        await sleep(CYCLE_MS);
+        // The panel's Time Search pace, read each cycle. Jitter stays at 0
+        // unless it was set, so the built-in wait is exactly `CYCLE_MS`.
+        const pacing = pacingFor('timeSearch');
+        await sleep(
+          withJitter(
+            pacing.intervalMs,
+            Math.random,
+            pacing.floorMs,
+            pacing.jitterFraction
+          )
+        );
       }
     }
 

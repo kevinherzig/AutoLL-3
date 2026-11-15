@@ -12,9 +12,9 @@ name: Build and deploy AutoLL-3
 #            autoloader.user.js, icon.png, index.css.
 #
 # Building main alone gives you an app with no way to install or launch
-# it. This workflow builds fresh code from main, then overlays the static
-# pages from the pinned installer revision, then repoints upstream URLs at this
-# fork.
+# it. `scripts/assemble-site.sh` builds fresh code from this commit, overlays
+# the static pages from the pinned installer revision, then repoints upstream
+# URLs at this fork. The same script publishes the nginx tree on `site-ll`.
 
 on:
   push:
@@ -50,11 +50,12 @@ env:
   # Origin this fork is served from, used only to repoint upstream's URLs in
   # the INHERITED static pages below. The app's own pages -- start, responder,
   # news -- no longer appear here or in the bundle as literals: they are
-  # composed at runtime from `PAGES_BASE` in src/appIdentity.ts, which is also
-  # where `base` in vite.config.mts gets its path segment. So this value is a
-  # second spelling of that one constant and must agree with it. It is kept
-  # spelled out because it brands files that never pass through the bundler.
-  PAGES_ORIGIN: https://mbs1234.github.io/AutoLL-3
+  # composed at runtime from `PAGES_BASE` in src/appIdentity.ts, and Vite's
+  # `base` is that URL's path (`/` at the site root). So this value is a
+  # second spelling of that one constant and must agree with it.
+  # `appIdentity.test.ts` fails if the two diverge. It is kept spelled out
+  # because it brands files that never pass through the bundler.
+  PAGES_ORIGIN: https://ll.herzig.net
   # Immutable inputs. The published runtime includes executable code from
   # AutoLL-2, so branch heads would let a rerun of the same AutoLL-3 commit
   # produce a different release without passing this repository's review gate.
@@ -72,28 +73,6 @@ jobs:
     steps:
       - name: Check out source (main)
         uses: actions/checkout@v5
-
-      - name: Check out pinned static site
-        uses: actions/checkout@v5
-        with:
-          # AutoLL-3 owns main; the inherited installer assets remain in the
-          # reviewed AutoLL-2 source repository until they are independently
-          # maintained here.
-          repository: mbs1234/AutoLL-2
-          ref: ${{ env.AUTOLL2_INSTALLER_REV }}
-          path: goofy-static
-
-      # The base's own published output. `sensor-data.js` is loaded at runtime
-      # by a dynamic import rather than bundled, so it has to be shipped
-      # alongside the build, and it has to be *this* copy -- `goofy` carries a
-      # different vintage of the same filename, and pairing that with this
-      # bundle fails in a way that is hard to read.
-      - name: Check out pinned runtime output
-        uses: actions/checkout@v5
-        with:
-          repository: mbs1234/AutoLL-2
-          ref: ${{ env.AUTOLL2_RUNTIME_REV }}
-          path: base-static
 
       - name: Set up Node
         uses: actions/setup-node@v5
@@ -138,234 +117,10 @@ jobs:
         if: ${{ format('{0}', inputs.skip_checks) != 'true' && !cancelled() }}
         run: npm run test:ci
 
-      - name: Build app bundle
-        run: npm run build
-
-      - name: Overlay pinned static site
-        run: |
-          set -euo pipefail
-          # Only files the mickey build does not emit. Build outputs
-          # (bg1.js, bg1.css, responder.html, wdw.js, chunks) are
-          # deliberately not copied, so freshly built code always wins.
-          #
-          # Also deliberately skipped:
-          #   diu.js, dlr.js - upstream's Disneyland modules; this build has
-          #                    no Disneyland client and never loads them
-          #   google*.html   - upstream's Google site-verification token
-          for f in index.html index.css icon.png start.html news.html \
-                   contact.html autoloader.user.js; do
-            if [ -f "goofy-static/$f" ]; then
-              cp "goofy-static/$f" "dist/$f"
-              echo "overlaid $f"
-            elif [ "$f" = index.html ] || [ "$f" = autoloader.user.js ]; then
-              # The two install paths: index.html generates the bookmarklet,
-              # autoloader.user.js is what the userscript loads. Publishing
-              # without either is publishing a site with no way into it, which
-              # is worth failing the deploy over. The rest are pages a link
-              # points at, where a 404 costs less than a blocked publish.
-              echo "::error::goofy-static/$f not found; the site would have no way to install it"
-              exit 1
-            else
-              echo "::warning::goofy-static/$f not found, skipped"
-            fi
-          done
-
-      - name: Overlay runtime modules from the base
-        run: |
-          set -euo pipefail
-          # Not a build output and not bundled: `src/api/sensor-data.ts` loads
-          # this by dynamic import at runtime, resolved next to bg1.js. Absent,
-          # the import rejects with an error carrying no HTTP status, so
-          # `useDataLoader` falls through to "Unknown error occurred" and every
-          # booking fails for a reason the message does not name. Taken from
-          # the runtime pin rather than the installer pin on purpose -- see the
-          # checkout steps above.
-          if [ -f "base-static/sensor-data.js" ]; then
-            cp "base-static/sensor-data.js" "dist/sensor-data.js"
-            echo "overlaid sensor-data.js"
-          else
-            echo "::error::base-static/sensor-data.js not found; booking will fail"
-            exit 1
-          fi
-          # Recorded here, checked after branding. This payload is the one file
-          # in dist/ that no step of ours may alter: it is obfuscated, so it has
-          # no redundancy to notice damage with, and Disney is the only party
-          # that validates it. See the branding step for what was reaching it.
-          sha256sum dist/sensor-data.js | cut -d' ' -f1 > /tmp/sensor-data.sha256
-
-      - name: Brand installer assets for AutoLL-3
-        run: |
-          set -euo pipefail
-          # index.html and autoloader.user.js hardcode joelface.github.io/bg1.
-          # Left unrewritten, the bookmarklet would silently load upstream's
-          # build instead of this one. The static pages are inherited from
-          # AutoLL-2, so their visible product name, repository links, and
-          # start-page preference key must be rewritten as well. Otherwise a
-          # person installing AutoLL-3 sees AutoLL-2 and the two builds share
-          # that preference on Disney's origin.
-          # `sensor-data.js` is excluded by name, and the exclusion is the
-          # point rather than a tidy-up. It matches `*.js`, it is copied into
-          # dist/ by the step above, and it was therefore in this rewrite's
-          # input set on every deploy that has ever run. Nothing has been
-          # damaged only because none of the four patterns below happens to
-          # occur in 8 KB of obfuscated code -- luck, not design. A future
-          # payload whose encoded strings contain `autoll2` would be edited in
-          # place, and obfuscated code has no redundancy to fail loudly with:
-          # the build stays green, the manifest hashes the corrupted file, and
-          # it surfaces in a park as every booking failing with no HTTP status.
-          # The repository's own rule is that this payload's contents are
-          # off-limits; this pipeline had been quietly exempting itself.
-          find dist -type f \( -name '*.html' -o -name '*.js' -o -name '*.css' \) \
-              -not -name 'sensor-data.js' -print0 \
-            | xargs -0 --no-run-if-empty \
-                sed -i \
-                  -e "s|https://joelface\.github\.io/bg1|$PAGES_ORIGIN|g" \
-                  -e 's|https://github.com/mbs1234/AutoLL-2|https://github.com/mbs1234/AutoLL-3|g' \
-                  -e 's/AutoLL-2/AutoLL-3/g' \
-                  -e 's/autoll2/autoll3/g'
-          # These are the only inherited pages that make up the installation
-          # path. Fail closed if a future upstream asset changes spelling and
-          # leaves AutoLL-2 branding in front of an AutoLL-3 user.
-          #
-          # The exit status is read explicitly rather than with `if grep ...`,
-          # because grep has three of them and that form conflated two: 0 is a
-          # match, 1 is clean, and 2 is "a file could not be read". `news.html`
-          # and `contact.html` are optional above -- the overlay warns and
-          # continues -- so one of them being absent made grep exit 2, which `if`
-          # treats as false, and the guard reported clean. Worse, grep searches
-          # the remaining files and prints their matches before exiting 2, so a
-          # build could print the offending line and publish anyway.
-          #
-          # Only the files that exist are searched, and anything other than a
-          # clean 1 fails the deploy.
-          assets=()
-          for f in index.html start.html news.html contact.html \
-                   autoloader.user.js; do
-            [ -f "dist/$f" ] && assets+=("dist/$f")
-          done
-          if [ ${#assets[@]} -eq 0 ]; then
-            echo '::error::no installer assets present to check for branding'
-            exit 1
-          fi
-          set +e
-          hits=$(grep -nEi 'AutoLL-2|autoll2|mbs1234/AutoLL-2' "${assets[@]}")
-          branding_status=$?
-          set -e
-          if [ "$branding_status" -eq 0 ]; then
-            echo "$hits"
-            echo '::error::AutoLL-2 branding remains in an AutoLL-3 installer asset'
-            exit 1
-          fi
-          if [ "$branding_status" -ne 1 ]; then
-            echo "::error::branding check failed to read its inputs (grep exit $branding_status)"
-            exit 1
-          fi
-          echo "--- remaining 'joelface' references ---"
-          echo "(github.com/joelface/bg1 source links are expected and kept:"
-          echo " GPL-3.0 attribution. bg1.joelface.com is the upstream time-sync"
-          echo " and live-data host, still in use.)"
-          grep -rn 'joelface' dist || echo "none"
-
-      # A Pages deployment has no release attachment, so leave a small,
-      # inspectable record in the published artifact itself. It covers every
-      # payload file, including chunks and the runtime module, and is
-      # generated only after every overlay and URL rewrite has completed, so
-      # it describes what is actually published.
-      #
-      # It records all three source revisions, because `dist` is assembled
-      # from three commits: the bundle from this one, the installer pages from
-      # AutoLL-2, and its runtime module. The commit that
-      # triggered the run identifies only the first, so a build reproduced
-      # from `sourceRevision` alone would not match what shipped.
-      #
-      # There is deliberately no `sha256sum --check` here. Re-reading the
-      # files in the same step that just hashed them re-derives the same
-      # answer and proves nothing; the manifest is a record for afterwards,
-      # and what is worth failing the deploy over is a payload file MISSING,
-      # which is checked below.
-      # The user guide ships with the site so the installer pages can link
-      # to something that explains the app. Unlike the inherited installer
-      # overlay above, these files live in THIS repository, so a missing one is
-      # a broken checkout rather than an absent upstream page -- there is
-      # nothing to degrade to, and failing is the honest answer.
-      #
-      # It runs before the manifest below on purpose: the guide is served, so
-      # it belongs in `autoll3-files.sha256` like every other served file.
-      - name: Verify the sensor payload was not rewritten
-        run: |
-          set -euo pipefail
-          # An exclusion in a `find` is a claim; this is the check. It costs a
-          # hash and it closes the only path in this pipeline that could ship a
-          # corrupted file with a green build and a manifest that faithfully
-          # records the corruption.
-          expected=$(cat /tmp/sensor-data.sha256)
-          actual=$(sha256sum dist/sensor-data.js | cut -d' ' -f1)
-          if [ "$expected" != "$actual" ]; then
-            echo "::error::sensor-data.js changed after it was copied ($expected -> $actual); something in this workflow is rewriting the payload and every booking would fail with no HTTP status"
-            exit 1
-          fi
-          echo "sensor-data.js unchanged ($actual)"
-
-      - name: Overlay the user guide
-        run: |
-          set -euo pipefail
-          for f in docs/user-guide.html docs/user-guide; do
-            if [ ! -e "$f" ]; then
-              echo "::error::$f not found; the site would link to a missing guide"
-              exit 1
-            fi
-          done
-          cp docs/user-guide.html dist/guide.html
-          cp -R docs/user-guide dist/user-guide
-          echo "guide: $(find dist/user-guide -type f | wc -l | tr -d ' ') screenshots + guide.html"
-
-      - name: Create release manifest
-        run: |
-          set -euo pipefail
-          installer_rev=$(git -C goofy-static rev-parse HEAD)
-          base_rev=$(git -C base-static rev-parse HEAD)
-          (
-            cd dist
-            find . -type f \
-              ! -name autoll3-files.sha256 \
-              ! -name autoll3-release.json \
-              -printf '%P\n' \
-              | LC_ALL=C sort \
-              | while IFS= read -r file; do sha256sum "$file"; done \
-              > autoll3-files.sha256
-            # Every file an install path needs by name. bg1.css and
-            # responder.html were missing from this list, and they are the two
-            # whose absence breaks the app quietly rather than loudly -- an
-            # unstyled page, and a sign-in that never completes.
-            # `wdw.js` is the resort data chunk, dynamically imported by
-            # `loadResort`, and `responder.js` is what `responder.html` loads to
-            # complete sign-in. Both are rollup outputs whose names a Vite or
-            # Rollup change could alter, and both were missing from this list --
-            # so a renamed chunk would have passed every gate. Jest never touches
-            # the built bundle and typecheck does not know about filenames, which
-            # leaves this check as the only thing that would notice.
-            # `contact.html` is here for a reason that is not about the app
-            # working. It carries the only clickable joelface/bg1 and
-            # jgeurts/bg1 links in the whole published site -- FORK.md long
-            # said they were in start.html and index.html, and they are in
-            # neither. This build is GPL-3.0-only and those links are its
-            # attribution, so a deploy that quietly drops the file is a deploy
-            # that quietly drops the attribution. The overlay still treats it
-            # as degradable, which is right for a page a link points at; this
-            # is the step that says it may not actually go missing.
-            for file in bg1.js bg1.css responder.html responder.js wdw.js \
-                        sensor-data.js index.html index.css contact.html \
-                        autoloader.user.js; do
-              # Anchored to end of line so a `.map` or a same-named file in a
-              # subdirectory cannot satisfy the check for the real one.
-              grep -Eq "  ${file//./\\.}$" autoll3-files.sha256 || {
-                echo "::error::$file is absent from the release manifest"
-                exit 1
-              }
-            done
-            printf '{\n  "application": "AutoLL-3",\n  "sourceRevision": "%s",\n  "installerRevision": "%s",\n  "runtimeModuleRevision": "%s",\n  "fileManifest": "autoll3-files.sha256"\n}\n' \
-              "$GITHUB_SHA" "$installer_rev" "$base_rev" > autoll3-release.json
-          )
+      # Build, overlay, brand, guide and manifest. The steps that used to live
+      # here are the script, so a rebuild for nginx cannot drift from CI.
+      - name: Assemble site
+        run: bash scripts/assemble-site.sh
 
       - name: Show what will be deployed
         run: ls -la dist

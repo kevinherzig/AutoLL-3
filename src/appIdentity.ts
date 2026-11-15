@@ -56,14 +56,28 @@ export const APP_ICON = '🧪';
  *
  * The bookmarklet runs injected into Disney's origin and has none of its own,
  * so the handful of pages that cannot run there -- the start page, the OAuth
- * responder, the news feed -- are served from GitHub Pages instead. The path
- * segment is the repository name, which is also `APP_NAME`.
+ * responder, the news feed -- are served from this site. This fork is
+ * self-hosted at the site root (`https://ll.herzig.net/`), not under a
+ * repository path on GitHub Pages.
  *
  * One constant rather than three spelled-out URLs: these are the addresses
  * that must never point at a sibling build, because the responder in
- * particular is handed a live Disney session.
+ * particular is handed a live Disney session. No trailing slash: callers
+ * append `/start.html` and the rest.
  */
-export const PAGES_BASE = `https://mbs1234.github.io/${APP_NAME}`;
+export const PAGES_BASE = 'https://ll.herzig.net';
+
+/**
+ * Vite `base` for a build served from `pagesBase`.
+ *
+ * `/` when the site is the origin root, so `bg1.js` is
+ * `https://ll.herzig.net/bg1.js`. A pages URL that still lives under a path
+ * keeps that path, with the trailing slash Vite requires.
+ */
+export function pagesBasePath(pagesBase: string = PAGES_BASE): string {
+  const path = new URL(pagesBase).pathname;
+  return path.endsWith('/') ? path : `${path}/`;
+}
 
 declare const __BUILD_REV__: string | undefined;
 

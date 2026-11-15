@@ -9,6 +9,7 @@ import { TODAY } from '@/testing';
 
 import { findSameReservation } from './automodify';
 import { MAX_MUTATION_MS } from './mutation';
+import { resetAllPolling, savePollingRule } from './pollingSettings';
 import {
   lastPushback,
   noteRefusal,
@@ -180,11 +181,30 @@ async function runCycles(n = 3) {
 }
 
 describe('useTimeSearch', () => {
+  afterEach(() => resetAllPolling());
+
   it('does nothing until started', async () => {
     const { result, deps } = setup();
     await runCycles(1);
     expect(deps.getTimes).not.toHaveBeenCalled();
     expect(result.current.running).toBe(false);
+  });
+
+  it('waits the Time Search pace from the control panel', async () => {
+    savePollingRule('timeSearch', { intervalMs: 20_000, jitterPercent: 0 });
+    const { result, deps } = setup({ held: at(11), times: [[at(11)]] });
+    act(() => result.current.start());
+    await waitFor(() => expect(deps.getTimes).toHaveBeenCalledTimes(1));
+    // `waitFor` may already have moved the fake clock a little, so this only
+    // checks that a short step does not start another check at a 20s pace.
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(1000);
+    });
+    expect(deps.getTimes).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(20_000);
+    });
+    expect((deps.getTimes as jest.Mock).mock.calls.length).toBeGreaterThan(1);
   });
 
   it('moves a reservation earlier on its own', async () => {

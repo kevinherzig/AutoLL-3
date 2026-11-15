@@ -3,10 +3,10 @@ import { useEffect, useRef, useState } from 'react';
 import { ParkTime } from '@/datetime';
 import { syncTime } from '@/timesync';
 
+import { cadenceIntervals, pacingFor } from './pollingSettings';
 import {
   MAX_CONSECUTIVE_FAILURES,
   PollMode,
-  RAPID_MIN_INTERVAL_MS,
   TICK_DEADLINE_MS,
   backoffMs,
   cadence,
@@ -318,6 +318,8 @@ export default function usePoller({
         return;
       }
 
+      // Read at schedule time, not at mount, so a pace saved on the Polling
+      // screen applies to the next wait of a search that is already running.
       const next = cadence({
         now: syncedParkTime(),
         dropTimes: dropTimesRef.current,
@@ -325,7 +327,9 @@ export default function usePoller({
         nextBookTimes: nextBookTimesRef.current,
         rapid: rapidRef.current,
         tomorrow: tomorrowRef.current,
+        intervals: cadenceIntervals(),
       });
+      const pacing = pacingFor(next.rule);
 
       // Keep the clock offset fresh while something is actually coming up.
       // syncTime() self-throttles to once every five minutes, so calling it
@@ -352,7 +356,8 @@ export default function usePoller({
           : withJitter(
               next.intervalMs,
               undefined,
-              rapidRef.current ? RAPID_MIN_INTERVAL_MS : undefined
+              pacing.floorMs,
+              pacing.jitterFraction
             )
       );
     };

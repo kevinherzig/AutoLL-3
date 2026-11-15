@@ -35,7 +35,7 @@ park morning get made weeks before it.
 
 ## 1. Install it
 
-Open the [setup page](https://mbs1234.github.io/AutoLL-3/) **on the phone you
+Open the [setup page](https://ll.herzig.net/) **on the phone you
 will actually carry in the park** — not on a laptop. The whole app is built for
 a phone-width screen.
 
@@ -68,7 +68,7 @@ of the Settings menu.
 
 Run the bookmarklet on a page whose address begins `disneyworld.disney.go.com`.
 On any other Disney page the tab is silently sent to AutoLL-3's start page
-instead — if your tab suddenly becomes a GitHub Pages page, that is what
+instead — if your tab suddenly becomes ll.herzig.net, that is what
 happened.
 
 **The warning screen.** A red screen headed "Warning!" says the app is
@@ -116,7 +116,8 @@ can never be booked, so Autopilot books nothing; Plan Check's **Check current
 party** says "1 saved guest did not come back from Disney." for the same reason.
 
 The same menu carries **Backup and Restore** (see *It cannot protect its own
-storage*, below), **Log Out**, a **Session-only login** switch for a borrowed
+storage*, below), **Polling** (how often each search asks Disney; see
+*Polling*), **Log Out**, a **Session-only login** switch for a borrowed
 phone (the token then lives only as long as the tab), a line saying whether you
 are signed in and until when, a `Last backup:` line, and the build name.
 
@@ -766,7 +767,7 @@ arm, or switch off your day plan.
 
 **Book a new Lightning Lane** picks one attraction and takes the first time it
 can get, then keeps trying to move it earlier — checking about every 0.6
-seconds.
+seconds, unless you changed that under **Polling**.
 
 Two traps worth knowing:
 
@@ -1103,19 +1104,46 @@ empty next time.
 
 # Reference
 
+## Polling
+
+Gear → **Polling**. This is where the paces in the table below are changed.
+NextLL is the first section; Time Search, Autopilot's idle / approach / burst,
+the tomorrow watch, and refill windows are the sections under it.
+
+Each section shows its default, its safety floor, and its slowest allowed
+pace, and has **Reset to default**. **Reset every pace** puts them all back.
+A search already waiting finishes that wait on the old pace, then uses the
+new one. A search that has not started yet uses it from the first wait.
+
+Faster polling raises the chance Disney blocks the account. The panel does not
+turn the other protections off: the first 403 still stops every search, a 429
+still makes that search wait, and requests are still limited to 5 per second.
+Going under a section's safety floor takes an explicit switch, and even then
+nothing can be set under 0.2 seconds.
+
+These paces stay on this phone. A backup file contains them, and a restore
+does not write them back, same as dry run and the other settings.
+
 ## Checking speeds
 
-| Mode | Interval | Trigger |
-|---|---|---|
-| Idle ("Watching") | 45 s | Nothing near |
-| Approach ("Checking often") | 6 s | 5→2 min before a target, or inside a refill window |
-| Burst ("Checking rapidly") | 1.2 s | T−2:00 to T+2:00 around a target |
-| Tomorrow | 15 s | Booking date is tomorrow, 7am–10pm park time |
-| NextLL quick search | 0.6 s | A hand-started book search |
-| Time Search | 6 s | A hand-started time search |
+These are the built-in paces. Gear → **Polling** can change each one.
 
-Every interval is spread ±20% so the pattern is not perfectly regular. A date
-further out than tomorrow gets no drop times at all and sits at 45 s.
+| Mode | Default | Floor | Slowest | Trigger |
+|---|---|---|---|---|
+| Idle ("Watching") | 45 s | 1 s | 10 min | Nothing near |
+| Approach ("Checking often") | 6 s | 1 s | 10 min | 5→2 min before a target |
+| Burst ("Checking rapidly") | 1.2 s | 1 s | 10 min | T−2:00 to T+2:00 around a target |
+| Refill window | 6 s | 1 s | 10 min | Inside a watched refill window, when no drop is closer |
+| Tomorrow | 15 s | 1 s | 10 min | Booking date is tomorrow, 7am–10pm park time |
+| NextLL quick search | 0.6 s | 0.5 s | 10 min | A hand-started book search |
+| Time Search | 6 s | 1 s | 10 min | A hand-started time search or Change attraction |
+
+Every pace except Time Search is spread ±20% so the pattern is not perfectly
+regular. Time Search waits exactly its interval unless you set a jitter.
+Jitter can be set from 0 to ±50%. With the faster-polling switch on, the floor
+for that one pace drops to 0.2 s; the wait after jitter is never shorter than
+the floor in force. A date further out than tomorrow gets no drop times at all
+and sits at the idle pace.
 
 ## Limits and thresholds
 
@@ -1147,7 +1175,7 @@ further out than tomorrow gets no drop times at all and sits at 45 s.
 |---|---|
 | Turning Autopilot on, or Restart autopilot | Clears session log, skip counts, locks, cache, passkey status, drop baseline; re-alerts anything available. A refusal before it does not stop the new run; the next one does |
 | Turning Autopilot off | Leaves skip counts and the log alone |
-| Page reload | Autopilot off; skip counts, log and watch list survive |
+| Page reload | Autopilot off; skip counts, log, watch list and polling paces survive |
 | 4am park-day rollover | Autopilot off; screen wake lock released; log emptied; skip counts zeroed |
 
 ## Glossary

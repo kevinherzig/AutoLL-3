@@ -7,6 +7,7 @@ import {
   APP_SLUG,
   PAGES_BASE,
   applyAppIdentity,
+  pagesBasePath,
 } from './appIdentity';
 
 /** A document of its own, so the suite's real one is not renamed under it. */
@@ -63,11 +64,15 @@ describe('applyAppIdentity()', () => {
  * name, writes to the other's storage keys, and hands a live Disney session to
  * the other's responder page.
  *
- * So the test does not assert the literal 'AutoLL-3', which would only restate
- * the source file and would have to differ between the two repos. It asserts
- * that the identity agrees with `package.json`, which a merge would have to get
- * wrong in the same direction at the same time for this to pass. That check is
- * identical in both builds, which is the point: it is one fewer file to diverge.
+ * So the name test does not assert the literal 'AutoLL-3', which would only
+ * restate the source file and would have to differ between the two repos. It
+ * asserts that the name agrees with `package.json`, which a merge would have
+ * to get wrong in the same direction at the same time for this to pass.
+ *
+ * The pages origin is the exception, and it is asserted literally. This fork
+ * is self-hosted at https://ll.herzig.net, at the site root. A merge that
+ * takes upstream's GitHub Pages URL would hand the responder a different
+ * origin, so that assertion is supposed to fail until someone puts it back.
  */
 describe('this build knows which build it is', () => {
   const pkg = JSON.parse(
@@ -79,8 +84,26 @@ describe('this build knows which build it is', () => {
     expect(APP_NAME).toBe(repoName);
   });
 
-  it('serves its pages from its own repository', () => {
-    expect(PAGES_BASE).toBe(`https://mbs1234.github.io/${repoName}`);
+  it('serves its pages from the self-hosted site root', () => {
+    expect(PAGES_BASE).toBe('https://ll.herzig.net');
+    expect(pagesBasePath()).toBe('/');
+  });
+
+  // The old GitHub Pages URL put the bundle under /AutoLL-3/. A path that
+  // loses its trailing slash would make Vite emit the wrong asset URLs.
+  it('keeps a path prefix when the pages URL has one', () => {
+    expect(pagesBasePath('https://mbs1234.github.io/AutoLL-3')).toBe(
+      '/AutoLL-3/'
+    );
+  });
+
+  it('is the origin the deploy workflow brands the static site with', () => {
+    const yml = readFileSync(
+      join(process.cwd(), '.github/workflows/deploy.yml'),
+      'utf8'
+    );
+    const origin = yml.match(/^ {2}PAGES_ORIGIN: (\S+)/m)?.[1];
+    expect(origin).toBe(PAGES_BASE);
   });
 
   // The slug prefixes localStorage keys, notification tags and the cross-tab

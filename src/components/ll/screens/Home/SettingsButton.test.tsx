@@ -14,6 +14,7 @@ import {
 } from '@/testing';
 
 import BackupRestore from '../BackupRestore';
+import Polling from '../Polling';
 import SettingsButton from './SettingsButton';
 import { describeSession } from './describeSession';
 
@@ -83,6 +84,21 @@ describe('SettingsButton', () => {
     fireEvent.click(screen.getByText('Backup and Restore'));
     act(() => jest.runAllTimers());
     expect(nav.goTo).toHaveBeenCalledWith(<BackupRestore />);
+    jest.useRealTimers();
+  });
+
+  it('opens the polling screen', () => {
+    jest.useFakeTimers();
+    nav.goTo.mockClear();
+    render(
+      <nav.Provider>
+        <SettingsButton />
+      </nav.Provider>
+    );
+    fireEvent.click(screen.getByTitle('Settings Menu'));
+    fireEvent.click(screen.getByText('Polling'));
+    act(() => jest.runAllTimers());
+    expect(nav.goTo).toHaveBeenCalledWith(<Polling />);
     jest.useRealTimers();
   });
 

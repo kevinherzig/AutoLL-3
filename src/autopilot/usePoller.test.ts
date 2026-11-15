@@ -2,10 +2,12 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 
 import { DateTime } from '@/datetime';
 
+import { resetAllPolling, savePollingRule } from './pollingSettings';
 import {
   BACKOFF_CAP_MS,
   IDLE_INTERVAL_MS,
   MAX_CONSECUTIVE_FAILURES,
+  RAPID_MIN_INTERVAL_MS,
   TICK_DEADLINE_MS,
 } from './schedule';
 import usePoller, { PollerStop, PollerWait } from './usePoller';
@@ -490,5 +492,93 @@ describe('usePoller restart', () => {
     await advancePastNextTick();
     expect(onTick).not.toHaveBeenCalled();
     expect(result.current.mode).toBe('off');
+  });
+});
+
+/**
+ * NextLL is the rapid poller. Its wait is the pace from the control panel,
+ * read when the wait is scheduled, so a change applies on the next check.
+ */
+describe('usePoller NextLL pace', () => {
+  afterEach(() => resetAllPolling());
+
+  async function rapidPoller() {
+    const onTick = jest.fn(async () => undefined);
+    const view = renderHook(() =>
+      usePoller({ enabled: true, rapid: true, onTick })
+    );
+    // Flush the first check without moving the clock. `waitFor` would, and a
+    // 200ms pace has no room for that.
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(0);
+    });
+    expect(onTick).toHaveBeenCalledTimes(1);
+    return { onTick, ...view };
+  }
+
+  /**
+   * The next check has not happened halfway through `ms`, and it has happened
+   * once another `ms` has passed.
+   *
+   * Not the exact millisecond: fake timers in this repo can land a tick one
+   * millisecond early, and a halfway check still tells a 5s pace from the
+   * built-in 0.6s, and a 200ms floor from a 50ms request.
+   */
+  async function expectGap(onTick: jest.Mock, ms: number) {
+    const calls = onTick.mock.calls.length;
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(Math.floor(ms / 2));
+    });
+    expect(onTick).toHaveBeenCalledTimes(calls);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(ms);
+    });
+    expect(onTick).toHaveBeenCalledTimes(calls + 1);
+  }
+
+  it('waits the saved NextLL interval', async () => {
+    savePollingRule('nextll', { intervalMs: 5000, jitterPercent: 0 });
+    const { onTick } = await rapidPoller();
+    await expectGap(onTick, 5000);
+  });
+
+  it('picks up a pace saved while it is already running', async () => {
+    savePollingRule('nextll', { intervalMs: 5000, jitterPercent: 0 });
+    const { onTick } = await rapidPoller();
+    // The wait already scheduled stays 5s. The check after it waits 4s.
+    savePollingRule('nextll', { intervalMs: 4000, jitterPercent: 0 });
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(2500);
+    });
+    expect(onTick).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(3000);
+    });
+    expect(onTick).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(3000);
+    });
+    expect(onTick).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await jest.advanceTimersByTimeAsync(1500);
+    });
+    expect(onTick).toHaveBeenCalledTimes(3);
+  });
+
+  it('will not check faster than the floor without the override', async () => {
+    savePollingRule('nextll', { intervalMs: 100, jitterPercent: 0 });
+    const { onTick } = await rapidPoller();
+    await expectGap(onTick, RAPID_MIN_INTERVAL_MS);
+  });
+
+  it('uses an override under the floor, and still not under the absolute minimum', async () => {
+    savePollingRule('nextll', {
+      intervalMs: 50,
+      jitterPercent: 0,
+      belowFloor: true,
+    });
+    const { onTick } = await rapidPoller();
+    // 50ms is stored as the 200ms absolute minimum.
+    await expectGap(onTick, 200);
   });
 });
