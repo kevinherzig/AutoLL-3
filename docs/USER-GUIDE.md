@@ -35,7 +35,7 @@ park morning get made weeks before it.
 
 ## 1. Install it
 
-Open the [setup page](https://mbs1234.github.io/AutoLL-3/) **on the phone you
+Open the [setup page](https://ll.herzig.net/) **on the phone you
 will actually carry in the park** — not on a laptop. The whole app is built for
 a phone-width screen.
 
@@ -68,7 +68,7 @@ of the Settings menu.
 
 Run the bookmarklet on a page whose address begins `disneyworld.disney.go.com`.
 On any other Disney page the tab is silently sent to AutoLL-3's start page
-instead — if your tab suddenly becomes a GitHub Pages page, that is what
+instead — if your tab suddenly becomes ll.herzig.net, that is what
 happened.
 
 **The warning screen.** A red screen headed "Warning!" says the app is

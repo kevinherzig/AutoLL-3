@@ -4,7 +4,7 @@ import { execSync } from 'child_process';
 import path from 'path';
 import { defineConfig } from 'vite';
 
-import { APP_NAME } from './src/appIdentity';
+import { pagesBasePath } from './src/appIdentity';
 
 const server = {
   host: '127.0.0.1',
@@ -38,12 +38,12 @@ function buildRevision(): string {
 
 export default defineConfig({
   define: { __BUILD_REV__: JSON.stringify(buildRevision()) },
-  // GitHub Pages serves the build from a path named for the repository, which
-  // is also what the app calls itself -- the same segment `PAGES_BASE` builds
-  // its URLs on. Reaching into browser-side code from a node-side config is
-  // safe here only because `appIdentity` touches `document` inside a function
-  // body rather than at module scope.
-  base: `/${APP_NAME}/`,
+  // The same origin `PAGES_BASE` names. This fork is served at the site root,
+  // so the base is `/` and the bookmarklet loads `/bg1.js`. Reaching into
+  // browser-side code from a node-side config is safe here only because
+  // `appIdentity` touches `document` inside a function body rather than at
+  // module scope.
+  base: pagesBasePath(),
   root: 'src',
   resolve: {
     alias: {
