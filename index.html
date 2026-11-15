@@ -79,6 +79,11 @@
   .noscroll {
     overflow: hidden;
   }
+
+  .bm-install-button {
+    margin: 0.4em 0 0.2em;
+    text-align: center;
+  }
 </style>
 
 <div class="page">
@@ -91,6 +96,11 @@
     <aside class="warning">
       <p><strong>Warning!</strong> Use at your own risk. AutoLL-3 is highly experimental, for demonstration purposes only, and provided "as is" without warranty of any kind. It is in no way endorsed by or associated with the Walt Disney Company and could stop working at any time for any reason. To ensure the intended experience, always use the official Disney app.</p>
     </aside>
+
+    <div class="notice bm-install">
+      <p><strong>On a computer.</strong> Show the Favorites/Bookmarks bar (Safari: View &gt; Show Favorites Bar), drag the AutoLL-3 button onto it, then sign in at disneyworld.disney.go.com and click it.</p>
+      <p class="bm-install-button"><a class="button bm-drag" draggable="true" href="#" title="Drag this onto the Favorites or Bookmarks bar">AutoLL-3</a></p>
+    </div>
 
     <h2>What is AutoLL-3?</h2>
 
@@ -117,6 +127,10 @@
       <div>
         <p>This installation method involves creating a bookmarklet, which is a bookmark that contains JavaScript code instead of a Web address. For a visual tutorial of the setup process, watch the <a href="https://www.youtube.com/watch?v=TLFZ4Le_LnY">AutoLL-3 Setup Guide on YouTube</a>.</p>
 
+        <h3>On a computer</h3>
+        <p>Show the Favorites/Bookmarks bar (Safari: View &gt; Show Favorites Bar), drag the AutoLL-3 button onto it, then sign in at disneyworld.disney.go.com and click it.</p>
+        <p class="bm-install-button"><a class="button bm-drag" draggable="true" href="#" title="Drag this onto the Favorites or Bookmarks bar">AutoLL-3</a></p>
+        <p>On iPhone, copy the code instead:</p>
         <h3>Creating the bookmarklet</h3>
 
         <ol>
@@ -282,8 +296,12 @@
     .trim()
     .replace(/;$/, '')
     .replace(/\s*([;,{}=>+])\s*/g, '$1') + '()';
+  const bookmarklet = 'javascript:' + encodeURIComponent(scriptText);
   document.querySelectorAll('.bm-code').forEach(code => {
-    code.textContent = 'javascript:' + encodeURIComponent(scriptText);
+    code.textContent = bookmarklet;
+  });
+  document.querySelectorAll('a.bm-drag').forEach(link => {
+    link.setAttribute('href', bookmarklet);
   });
   const originalTitle = document.title;
   const instrElems = document.querySelectorAll('.instructions');
