@@ -145,6 +145,10 @@ if [ "$expected" != "$actual" ]; then
 fi
 echo "sensor-data.js unchanged ($actual)"
 
+# The drag button is not in the AutoLL-2 overlay. Patch it on after branding
+# so a rebuild keeps it, and so its href is filled by the page's own script.
+node scripts/patch-setup-page.mjs
+
 for f in docs/user-guide.html docs/user-guide; do
   if [ ! -e "$f" ]; then
     echo "$f not found; the site would link to a missing guide" >&2
@@ -213,6 +217,23 @@ if (decoded.includes('mbs1234.github.io') || decoded.includes('joelface.github.i
   process.exit(1);
 }
 console.log('bookmarklet loads https://ll.herzig.net/bg1.js and bg1.css');
+const drags = html.match(/class="button bm-drag"/g) ?? [];
+if (drags.length !== 2) {
+  console.error(`expected 2 drag buttons, found ${drags.length}`);
+  process.exit(1);
+}
+const filler = html.slice(html.lastIndexOf('<script>'));
+if (
+  !filler.includes(
+    "const bookmarklet = 'javascript:' + encodeURIComponent(scriptText);"
+  ) ||
+  !filler.includes('code.textContent = bookmarklet;') ||
+  !filler.includes("link.setAttribute('href', bookmarklet);")
+) {
+  console.error('the drag button href is not set from the .bm-code bookmarklet');
+  process.exit(1);
+}
+console.log('drag button uses the same bookmarklet as .bm-code');
 EOF
 
 if ! grep -q 'https://github.com/joelface/bg1' dist/contact.html ||
